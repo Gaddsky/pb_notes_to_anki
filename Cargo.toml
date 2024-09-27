@@ -1,0 +1,9 @@
+[package]
+name = "pb_notes_to_anki"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4.5.18", features = ["derive"] }
+genanki-rs = "0.4.0"
+scraper = "0.20.0"
