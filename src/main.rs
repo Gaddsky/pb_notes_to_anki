@@ -49,7 +49,6 @@ fn main() {
 fn parse_args() -> Result<(PathBuf, String, i64, i64), &'static str> {
     let args = Args::parse();
 
-    let filepath_string = args.file;
     let model_id = match args.model_id {
         Some(n) => n,
         None => {
@@ -65,7 +64,7 @@ fn parse_args() -> Result<(PathBuf, String, i64, i64), &'static str> {
         None => model_id / 100,
     };
 
-    let filepath = Path::new(&filepath_string).to_path_buf();
+    let filepath = PathBuf::from(args.file);
     let book_name = filepath.file_stem().unwrap().to_str().unwrap();
 
     Ok((filepath.clone(), book_name.to_string(), deck_id, model_id))
@@ -117,7 +116,7 @@ fn create_deck(
 
     for (word, translation_html) in collection {
         let note = Note::new(
-            pb_notes_model.to_owned(),
+            pb_notes_model.clone(),
             vec![&word, &translation_html.trim()],
         )
         .unwrap();
