@@ -17,17 +17,20 @@ const MODEL_ID: i64 = 1728045059; // the same model should have the same id acro
 struct Args {
     /// File path
     file: String,
-    /// Deck id
+    /// Deck id. Default value will be generated based on current timestamp
     #[arg(short, long)]
     deck_id: Option<i64>,
+    /// Minimum word count
+    #[arg(short, long, default_value_t=1)]
+    min_count: i32,
 }
 
 fn main() {
-    let (filepath, book_name, deck_id) = parse_args().unwrap();
+    let (filepath, book_name, deck_id, min_count) = parse_args().unwrap();
     let filepath = filepath.as_path();
 
     let collection = parse_html(filepath);
-    let pb_notes_deck = create_deck(collection, &book_name, deck_id);
+    let pb_notes_deck = create_deck(collection, &book_name, deck_id, min_count);
 
     pb_notes_deck
         .write_to_file(
@@ -39,11 +42,11 @@ fn main() {
         )
         .unwrap();
 
-    let report_content = write_report(filepath, &book_name, deck_id);
+    let report_content = write_report(filepath, &book_name, deck_id, min_count);
     println!("{}", report_content);
 }
 
-fn parse_args() -> Result<(PathBuf, String, i64), &'static str> {
+fn parse_args() -> Result<(PathBuf, String, i64, i32), &'static str> {
     let args = Args::parse();
 
     let deck_id = match args.deck_id {
@@ -60,17 +63,17 @@ fn parse_args() -> Result<(PathBuf, String, i64), &'static str> {
     let filepath = PathBuf::from(args.file);
     let book_name = filepath.file_stem().unwrap().to_str().unwrap();
 
-    Ok((filepath.clone(), book_name.to_string(), deck_id))
+    Ok((filepath.clone(), book_name.to_string(), deck_id, args.min_count))
 }
 
-fn parse_html(filepath: &Path) -> HashMap<String, String> {
+fn parse_html(filepath: &Path) -> HashMap<String, (String, i32)> {
     let html = fs::read_to_string(filepath).unwrap();
     let document = Html::parse_document(&html);
     let bookmark_selector = Selector::parse(".bookmark").unwrap();
     let text_selector = Selector::parse(".bm-text").unwrap();
     let note_selector = Selector::parse(".bm-note").unwrap();
 
-    let mut collection: HashMap<String, String> = HashMap::new();
+    let mut collection: HashMap<String, (String, i32)> = HashMap::new();
 
     for bookmark in document.select(&bookmark_selector) {
         if let Some(text) = bookmark.select(&text_selector).next() {
@@ -78,21 +81,35 @@ fn parse_html(filepath: &Path) -> HashMap<String, String> {
 
             if let Some(note) = bookmark.select(&note_selector).next() {
                 let translation_html = note.inner_html();
-                collection.insert(word.trim().to_string(), translation_html.trim().to_string());
+                let entry = collection
+                    .entry(word.trim().to_string())
+                    .or_insert((translation_html.trim().to_string(), 0));
+                entry.1 += 1
             }
         }
     }
     collection
 }
 
-fn create_deck(collection: HashMap<String, String>, book_name: &str, deck_id: i64) -> Deck {
+fn create_deck(
+    collection: HashMap<String, (String, i32)>,
+    book_name: &str,
+    deck_id: i64,
+    min_count: i32,
+) -> Deck {
     let pb_notes_model = Model::new(
         MODEL_ID,
         "Pocket Book Notes Model",
         vec![Field::new("Word"), Field::new("Translation")],
-        vec![Template::new("PB Notes card")
-            .qfmt(r#"<div class="wordstyle">{{Word}}</div>"#)
-            .afmt(r#"{{FrontSide}}<hr id="answer">{{Translation}}"#)],
+        vec![
+            Template::new("PB Notes card")
+                .qfmt(r#"<div class="wordstyle">{{Word}}</div>"#)
+                .afmt(r#"{{FrontSide}}<hr id="answer">{{Translation}}"#),
+            // TODO reversed card require extracting word transcription
+            // Template::new("PB Notes card")
+            //     .qfmt(r#"{{Translation}}"#)
+            //     .afmt(r#"{{FrontSide}}<hr id="answer"><div class="wordstyle">{{Word}}</div>"#),
+        ],
     )
     .css(include_str!("../assets/style.css"));
 
@@ -102,7 +119,10 @@ fn create_deck(collection: HashMap<String, String>, book_name: &str, deck_id: i6
         &format!("{book_name}. Deck created from Pocket Book translation notes"),
     );
 
-    for (word, translation_html) in collection {
+    for (word, (translation_html, word_count)) in collection {
+        if word_count < min_count {
+            continue;
+        }
         let note = Note::new(
             pb_notes_model.clone(),
             vec![&word, &translation_html.trim()],
@@ -122,13 +142,14 @@ fn get_report_path(filepath: &Path, book_name: &str) -> PathBuf {
     report_path
 }
 
-fn write_report(filepath: &Path, book_name: &str, deck_id: i64) -> String {
+fn write_report(filepath: &Path, book_name: &str, deck_id: i64, min_count: i32) -> String {
     let report_path = get_report_path(filepath, &book_name);
     let report_content = format!(
         include_str!("../assets/report_template.txt"),
         book_name = book_name,
         deck_id = deck_id,
-        filepath = filepath.as_os_str().to_str().unwrap()
+        filepath = filepath.as_os_str().to_str().unwrap(),
+        min_count = min_count
     );
 
     let mut report_file = File::create(report_path).unwrap();

@@ -2,4 +2,4 @@ Book name: {book_name}
 Deck id: {deck_id}
 
 Next time you can add cards to your deck by re-generating it using the following command:
-./pb_notes_to_anki {filepath} --deck-id={deck_id}
+./pb_notes_to_anki {filepath} --deck-id={deck_id} --min-count={min_count}
