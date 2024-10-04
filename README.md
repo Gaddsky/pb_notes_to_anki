@@ -14,4 +14,4 @@ With executable:
 pb_notes_to_anki Notes_file.html
 ```
 
-Also available options to use predefined deck_id and model_id. Run with `-h` or `--help` option for details.
+Also available option to use predefined deck_id. Run with `-h` or `--help` option for details.

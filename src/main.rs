@@ -10,25 +10,24 @@ use clap::Parser;
 use genanki_rs::{Deck, Field, Model, Note, Template};
 use scraper::{Html, Selector};
 
+const MODEL_ID: i64 = 1728045059; // the same model should have the same id across all decks
+
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
     /// File path
     file: String,
-    /// Model id
-    #[arg(short, long)]
-    model_id: Option<i64>,
     /// Deck id
     #[arg(short, long)]
     deck_id: Option<i64>,
 }
 
 fn main() {
-    let (filepath, book_name, deck_id, model_id) = parse_args().unwrap();
+    let (filepath, book_name, deck_id) = parse_args().unwrap();
     let filepath = filepath.as_path();
 
     let collection = parse_html(filepath);
-    let pb_notes_deck = create_deck(collection, &book_name, deck_id, model_id);
+    let pb_notes_deck = create_deck(collection, &book_name, deck_id);
 
     pb_notes_deck
         .write_to_file(
@@ -40,16 +39,14 @@ fn main() {
         )
         .unwrap();
 
-    let report_path = get_report_path(filepath, &book_name);
-    write_report(report_path.as_path(), &book_name, deck_id, model_id);
-
-    println!("Anki deck was created with deck_id={deck_id}, model_id={model_id}")
+    let report_content = write_report(filepath, &book_name, deck_id);
+    println!("{}", report_content);
 }
 
-fn parse_args() -> Result<(PathBuf, String, i64, i64), &'static str> {
+fn parse_args() -> Result<(PathBuf, String, i64), &'static str> {
     let args = Args::parse();
 
-    let model_id = match args.model_id {
+    let deck_id = match args.deck_id {
         Some(n) => n,
         None => {
             (SystemTime::now()
@@ -59,15 +56,11 @@ fn parse_args() -> Result<(PathBuf, String, i64, i64), &'static str> {
                 * 10e8) as i64
         }
     };
-    let deck_id = match args.deck_id {
-        Some(n) => n,
-        None => model_id / 100,
-    };
 
     let filepath = PathBuf::from(args.file);
     let book_name = filepath.file_stem().unwrap().to_str().unwrap();
 
-    Ok((filepath.clone(), book_name.to_string(), deck_id, model_id))
+    Ok((filepath.clone(), book_name.to_string(), deck_id))
 }
 
 fn parse_html(filepath: &Path) -> HashMap<String, String> {
@@ -92,14 +85,9 @@ fn parse_html(filepath: &Path) -> HashMap<String, String> {
     collection
 }
 
-fn create_deck(
-    collection: HashMap<String, String>,
-    book_name: &str,
-    deck_id: i64,
-    model_id: i64,
-) -> Deck {
+fn create_deck(collection: HashMap<String, String>, book_name: &str, deck_id: i64) -> Deck {
     let pb_notes_model = Model::new(
-        model_id,
+        MODEL_ID,
         "Pocket Book Notes Model",
         vec![Field::new("Word"), Field::new("Translation")],
         vec![Template::new("PB Notes card")
@@ -134,12 +122,17 @@ fn get_report_path(filepath: &Path, book_name: &str) -> PathBuf {
     report_path
 }
 
-fn write_report(report_path: &Path, book_name: &str, deck_id: i64, model_id: i64) {
+fn write_report(filepath: &Path, book_name: &str, deck_id: i64) -> String {
+    let report_path = get_report_path(filepath, &book_name);
     let report_content = format!(
         include_str!("../assets/report_template.txt"),
-        book_name, deck_id, model_id
+        book_name = book_name,
+        deck_id = deck_id,
+        filepath = filepath.as_os_str().to_str().unwrap()
     );
 
     let mut report_file = File::create(report_path).unwrap();
     report_file.write_all(report_content.as_bytes()).unwrap();
+
+    report_content
 }
