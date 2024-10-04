@@ -21,7 +21,7 @@ struct Args {
     #[arg(short, long)]
     deck_id: Option<i64>,
     /// Minimum word count
-    #[arg(short, long, default_value_t=1)]
+    #[arg(short, long, default_value_t = 1)]
     min_count: i32,
 }
 
@@ -63,7 +63,12 @@ fn parse_args() -> Result<(PathBuf, String, i64, i32), &'static str> {
     let filepath = PathBuf::from(args.file);
     let book_name = filepath.file_stem().unwrap().to_str().unwrap();
 
-    Ok((filepath.clone(), book_name.to_string(), deck_id, args.min_count))
+    Ok((
+        filepath.clone(),
+        book_name.to_string(),
+        deck_id,
+        args.min_count,
+    ))
 }
 
 fn parse_html(filepath: &Path) -> HashMap<String, (String, i32)> {
